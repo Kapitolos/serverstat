@@ -689,12 +689,39 @@ function handleFileImport(event) {
         try {
             const data = JSON.parse(e.target.result);
             
-            if (confirm('This will replace all current data. Are you sure?')) {
-                if (data.shifts) {
-                    // Migrate old shift data if needed (employees -> employeeIds)
+            // Check if there's existing data
+            const existingShifts = getShifts();
+            const hasExistingData = existingShifts.length > 0;
+            
+            let message = hasExistingData 
+                ? 'This will merge imported data with your existing data. Continue?'
+                : 'Import this data?';
+            
+            if (confirm(message)) {
+                // Merge shifts (avoid duplicates by timestamp)
+                if (data.shifts && data.shifts.length > 0) {
+                    const existingTimestamps = new Set(existingShifts.map(s => s.timestamp));
+                    const newShifts = data.shifts
+                        .map(shift => {
+                            // Migrate old format if needed
+                            if (shift.employees && !shift.employeeIds) {
+                                const employees = getEmployees();
+                                const employeeIds = shift.employees.map(empName => {
+                                    const emp = employees.find(e => e.name === empName);
+                                    return emp ? emp.id : null;
+                                }).filter(Boolean);
+                                return { ...shift, employeeIds };
+                            }
+                            return shift;
+                        })
+                        .filter(shift => !existingTimestamps.has(shift.timestamp)); // Only add new shifts
+                    
+                    const mergedShifts = [...existingShifts, ...newShifts];
+                    saveShifts(mergedShifts);
+                } else if (data.shifts && !hasExistingData) {
+                    // No existing data, just use imported
                     const migratedShifts = data.shifts.map(shift => {
                         if (shift.employees && !shift.employeeIds) {
-                            // Migrate old format
                             const employees = getEmployees();
                             const employeeIds = shift.employees.map(empName => {
                                 const emp = employees.find(e => e.name === empName);
@@ -706,7 +733,18 @@ function handleFileImport(event) {
                     });
                     saveShifts(migratedShifts);
                 }
-                if (data.employees) saveEmployees(data.employees);
+                
+                // Merge employees (avoid duplicates)
+                if (data.employees && data.employees.length > 0) {
+                    const existingEmployees = getEmployees();
+                    const existingIds = new Set(existingEmployees.map(e => e.id));
+                    const newEmployees = data.employees.filter(emp => !existingIds.has(emp.id));
+                    if (newEmployees.length > 0) {
+                        saveEmployees([...existingEmployees, ...newEmployees]);
+                    }
+                }
+                
+                // Update min wage if provided
                 if (data.minWage) {
                     saveMinWage(data.minWage);
                     document.getElementById('minWage').value = data.minWage;
@@ -715,7 +753,7 @@ function handleFileImport(event) {
                 loadEmployees();
                 loadVenues();
                 loadShifts();
-                alert('Data imported successfully!');
+                alert('Data imported successfully! ' + (hasExistingData ? 'New data merged with existing.' : ''));
             }
         } catch (error) {
             alert('Error importing data: ' + error.message);
@@ -743,13 +781,27 @@ function clearAllData() {
 }
 
 // Toggle collapsible sections
-function toggleCollapsible(section) {
+let lastToggleTime = 0;
+function toggleCollapsible(section, event) {
+    // Prevent double-firing on mobile (touch + click)
+    const now = Date.now();
+    if (now - lastToggleTime < 300) {
+        if (event) event.preventDefault();
+        return;
+    }
+    lastToggleTime = now;
+    
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    
     const content = document.getElementById(section + 'Content');
     const icon = document.getElementById(section + 'Icon');
     
     if (!content || !icon) return;
 
-    if (content.style.display === 'none') {
+    if (content.style.display === 'none' || !content.style.display) {
         content.style.display = 'block';
         icon.textContent = '▲';
     } else {

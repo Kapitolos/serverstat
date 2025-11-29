@@ -16,7 +16,7 @@
         <div class="main-content">
             <!-- Settings Panel -->
             <section class="card settings-panel collapsible">
-                <div class="collapsible-header" onclick="toggleCollapsible('settings')">
+                <div class="collapsible-header" onclick="toggleCollapsible('settings', event)">
                     <h2>Settings</h2>
                     <span class="collapsible-icon" id="settingsIcon">▼</span>
                 </div>
@@ -104,7 +104,7 @@
 
             <!-- Statistics Section -->
             <section class="card collapsible" id="statsSection" style="display: none;">
-                <div class="collapsible-header" onclick="toggleCollapsible('stats')">
+                <div class="collapsible-header" onclick="toggleCollapsible('stats', event)">
                     <h2>Period Statistics</h2>
                     <span class="collapsible-icon" id="statsIcon">▼</span>
                 </div>
