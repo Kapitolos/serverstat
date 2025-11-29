@@ -69,7 +69,7 @@ function getShifts() {
 
 function getEmployees() {
     const data = localStorage.getItem(STORAGE_KEYS.EMPLOYEES);
-    return data ? JSON.parse(data) : [];
+    return data ? JSON.parse(data) : DEFAULT_EMPLOYEES;
 }
 
 function getVenues() {
@@ -88,8 +88,6 @@ function saveShifts(shifts) {
 function saveEmployees(employees) {
     localStorage.setItem(STORAGE_KEYS.EMPLOYEES, JSON.stringify(employees));
 }
-
-// Venues are fixed, no save function needed
 
 function saveMinWage(wage) {
     localStorage.setItem(STORAGE_KEYS.MIN_WAGE, wage.toString());
@@ -631,7 +629,7 @@ function handleSubmit(event) {
     updateSelectedEmployeesDisplay();
 
     // Reload display
-    loadShifts();
+    await loadShifts();
 
     // Show success message
     alert('Shift saved successfully!');
