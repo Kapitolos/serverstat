@@ -69,7 +69,15 @@ function getShifts() {
 
 function getEmployees() {
     const data = localStorage.getItem(STORAGE_KEYS.EMPLOYEES);
-    return data ? JSON.parse(data) : DEFAULT_EMPLOYEES;
+    if (data) {
+        try {
+            return JSON.parse(data);
+        } catch (e) {
+            console.error('Error parsing employees:', e);
+            return DEFAULT_EMPLOYEES;
+        }
+    }
+    return DEFAULT_EMPLOYEES;
 }
 
 function getVenues() {
@@ -104,38 +112,49 @@ function loadEmployees() {
     }
     
     const employees = getEmployees();
+    console.log('Loading employees:', employees);
+    
     const employeeList = document.getElementById('employeeList');
     const employeeButtons = document.getElementById('employeeButtons');
 
     if (!employeeList || !employeeButtons) {
         // Elements not ready yet, try again shortly
+        console.log('Employee elements not ready, retrying...');
         setTimeout(loadEmployees, 100);
         return;
     }
 
     // Update tag list in settings
     employeeList.innerHTML = '';
-    employees.forEach(employee => {
-        const li = document.createElement('li');
-        li.className = 'tag';
-        li.innerHTML = `
-            ${employee.name}
-            <button onclick="removeEmployee('${employee.id}')" aria-label="Remove ${employee.name}">×</button>
-        `;
-        employeeList.appendChild(li);
-    });
+    if (employees && employees.length > 0) {
+        employees.forEach(employee => {
+            const li = document.createElement('li');
+            li.className = 'tag';
+            li.innerHTML = `
+                ${employee.name}
+                <button onclick="removeEmployee('${employee.id}')" aria-label="Remove ${employee.name}">×</button>
+            `;
+            employeeList.appendChild(li);
+        });
+    }
 
     // Update employee selection buttons
     employeeButtons.innerHTML = '';
-    employees.forEach(employee => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'employee-button';
-        button.textContent = employee.name;
-        button.dataset.employeeId = employee.id;
-        button.onclick = () => toggleEmployee(employee.id);
-        employeeButtons.appendChild(button);
-    });
+    if (employees && employees.length > 0) {
+        employees.forEach(employee => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'employee-button';
+            button.textContent = employee.name;
+            button.dataset.employeeId = employee.id;
+            button.onclick = () => toggleEmployee(employee.id);
+            employeeButtons.appendChild(button);
+        });
+        console.log('Employee buttons created:', employees.length);
+    } else {
+        console.warn('No employees to display!');
+        employeeButtons.innerHTML = '<p style="color: var(--text-tertiary); font-size: 0.875rem;">No employees available. Check Settings to add employees.</p>';
+    }
 
     // Update selected employees display
     updateSelectedEmployeesDisplay();
@@ -196,12 +215,17 @@ function loadVenues() {
 
     // Update select dropdown
     venueSelect.innerHTML = '<option value="">Select venue...</option>';
-    venues.forEach(venue => {
-        const option = document.createElement('option');
-        option.value = venue;
-        option.textContent = venue;
-        venueSelect.appendChild(option);
-    });
+    if (venues && venues.length > 0) {
+        venues.forEach(venue => {
+            const option = document.createElement('option');
+            option.value = venue;
+            option.textContent = venue;
+            venueSelect.appendChild(option);
+        });
+        console.log('Venues loaded:', venues);
+    } else {
+        console.warn('No venues found!');
+    }
 }
 
 function loadTotalStats() {
@@ -551,7 +575,7 @@ function getHealthColor(score) {
     return 'red';
 }
 
-// Employee management
+// Employee management - make globally accessible
 function addEmployee() {
     const input = document.getElementById('newEmployee');
     const name = input.value.trim();
@@ -576,6 +600,7 @@ function addEmployee() {
     input.value = '';
 }
 
+// Make globally accessible
 function removeEmployee(employeeId) {
     const employees = getEmployees();
     const employee = employees.find(emp => emp.id === employeeId);
@@ -591,7 +616,7 @@ function removeEmployee(employeeId) {
 
 // Venues are fixed, no management functions needed
 
-// Shift form handling
+// Shift form handling - make globally accessible
 function handleSubmit(event) {
     event.preventDefault();
 
@@ -629,7 +654,7 @@ function handleSubmit(event) {
     updateSelectedEmployeesDisplay();
 
     // Reload display
-    await loadShifts();
+    loadShifts();
 
     // Show success message
     alert('Shift saved successfully!');
@@ -656,7 +681,7 @@ function updateMinWage() {
     }
 }
 
-// Export/Import functionality
+// Export/Import functionality - make globally accessible
 function exportData() {
     const data = {
         shifts: getShifts(),
@@ -676,10 +701,12 @@ function exportData() {
     URL.revokeObjectURL(url);
 }
 
+// Make globally accessible
 function importData() {
     document.getElementById('importFile').click();
 }
 
+// Make globally accessible
 function handleFileImport(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -780,13 +807,16 @@ function clearAllData() {
     }
 }
 
-// Toggle collapsible sections
+// Toggle collapsible sections - ensure global access
 let lastToggleTime = 0;
 function toggleCollapsible(section, event) {
     // Prevent double-firing on mobile (touch + click)
     const now = Date.now();
     if (now - lastToggleTime < 300) {
-        if (event) event.preventDefault();
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
         return;
     }
     lastToggleTime = now;
@@ -799,9 +829,15 @@ function toggleCollapsible(section, event) {
     const content = document.getElementById(section + 'Content');
     const icon = document.getElementById(section + 'Icon');
     
-    if (!content || !icon) return;
+    if (!content || !icon) {
+        console.warn('Could not find collapsible elements for:', section);
+        return;
+    }
 
-    if (content.style.display === 'none' || !content.style.display) {
+    const isHidden = content.style.display === 'none' || 
+                     (content.style.display === '' && window.getComputedStyle(content).display === 'none');
+    
+    if (isHidden) {
         content.style.display = 'block';
         icon.textContent = '▲';
     } else {
@@ -810,7 +846,11 @@ function toggleCollapsible(section, event) {
     }
 }
 
+// Make function globally accessible
+window.toggleCollapsible = toggleCollapsible;
+
 // Display statistics for a given period
+// Make globally accessible
 function showStatsPeriod(period) {
     const stats = calculateStats(period);
     const statsContent = document.getElementById('statsContentInner');
