@@ -139,12 +139,12 @@
 
         <div class="main-content">
             <!-- Shift Entry Form -->
-            <section class="card" id="shiftFormSection">
-                <button type="button" class="collapsible-header" id="shiftFormToggle" aria-expanded="true" aria-controls="shiftFormContent" onclick="toggleShiftForm()">
+            <section class="card is-collapsed" id="shiftFormSection">
+                <button type="button" class="collapsible-header" id="shiftFormToggle" aria-expanded="false" aria-controls="shiftFormContent" onclick="toggleShiftForm()">
                     <span class="card-title" id="shiftFormTitle">Log New Shift</span>
-                    <span class="collapsible-icon" id="shiftFormIcon" aria-hidden="true">▴</span>
+                    <span class="collapsible-icon" id="shiftFormIcon" aria-hidden="true">▾</span>
                 </button>
-                <div class="collapsible-content" id="shiftFormContent">
+                <div class="collapsible-content" id="shiftFormContent" hidden>
                     <form id="shiftForm" onsubmit="handleSubmit(event)">
                         <div class="form-row">
                             <div class="form-group">
@@ -232,6 +232,7 @@
                             <option value="oldest">Oldest first</option>
                         </select>
                     </div>
+                    <div class="history-period-browser" id="historyPeriodBrowser" hidden></div>
                 </div>
                 <div id="recordsContainer">
                     <p class="empty-state">No shifts recorded yet. Log your first shift above!</p>

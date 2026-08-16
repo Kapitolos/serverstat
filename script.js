@@ -21,6 +21,8 @@ let currentStatsPeriod = 'week';
 let activeNavPanel = null;
 let editingTimestamp = null;
 let dialogResolver = null;
+let historyPickerOpen = false;
+let calendarCursor = null;
 
 function showAppAlert(message) {
     return showAppDialog(message, false);
@@ -77,6 +79,8 @@ function createEmptyProfile(displayName) {
         minWage: DEFAULT_MIN_WAGE,
         historyGroup: 'week',
         historySort: 'newest',
+        historyWeek: null,
+        historyMonth: null,
         collectedDuebacks: {},
         venues: DEFAULT_VENUES.slice(),
         venueWages: {}
@@ -241,6 +245,38 @@ function saveHistoryGroupBy(groupBy) {
 
 function saveHistorySort(sortOrder) {
     updateCurrentProfile({ historySort: sortOrder });
+}
+
+function getMonthKey(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function parseMonthKey(key) {
+    const [year, month] = String(key || '').split('-').map(Number);
+    if (!year || !month) return new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    return new Date(year, month - 1, 1);
+}
+
+function getSelectedWeekMonday() {
+    const stored = getCurrentProfile().historyWeek;
+    if (stored && /^\d{4}-\d{2}-\d{2}$/.test(stored)) {
+        return getMonday(parseLocalDate(stored));
+    }
+    return getMonday(new Date());
+}
+
+function saveSelectedWeekMonday(monday) {
+    updateCurrentProfile({ historyWeek: toISODate(monday) });
+}
+
+function getSelectedMonthKey() {
+    const stored = getCurrentProfile().historyMonth;
+    if (stored && /^\d{4}-\d{2}$/.test(stored)) return stored;
+    return getMonthKey(new Date());
+}
+
+function saveSelectedMonthKey(key) {
+    updateCurrentProfile({ historyMonth: key });
 }
 
 function getTheme() {
@@ -548,6 +584,7 @@ function startApp() {
     updateActiveNameDisplay();
     loadVenues();
     loadShifts();
+    setShiftFormCollapsed(true);
 }
 
 function parseLocalDate(dateStr) {
@@ -740,6 +777,8 @@ async function removeVenue(venueName) {
 
 function setHistoryGroupBy(groupBy) {
     saveHistoryGroupBy(groupBy);
+    historyPickerOpen = false;
+    calendarCursor = null;
     loadShifts();
 }
 
@@ -762,6 +801,7 @@ function loadShifts() {
     }
 
     if (shifts.length === 0) {
+        setHistoryPeriodBrowser(null);
         container.innerHTML = '<p class="empty-state">No shifts recorded yet. Log your first shift above!</p>';
         loadWeeklyDuebacks(shifts);
         showStatsPeriod(currentStatsPeriod);
@@ -793,10 +833,21 @@ function renderShiftHistory(shifts, groupBy) {
     const container = document.getElementById('recordsContainer');
     container.innerHTML = '';
     const newestFirst = getHistorySort() === 'newest';
+    setHistoryPeriodBrowser(null);
 
     if (groupBy === 'all') {
         const sortedShifts = [...shifts].sort((a, b) => compareShiftsByDate(a, b, newestFirst));
         sortedShifts.forEach(shift => container.appendChild(createShiftCard(shift)));
+        return;
+    }
+
+    if (groupBy === 'week') {
+        renderWeekHistory(container, shifts, newestFirst);
+        return;
+    }
+
+    if (groupBy === 'month') {
+        renderMonthHistory(container, shifts, newestFirst);
         return;
     }
 
@@ -809,8 +860,8 @@ function renderShiftHistory(shifts, groupBy) {
         header.className = 'history-group-header';
         header.innerHTML = `
             <div>
-                <div class="history-group-title">${group.title}</div>
-                <div class="history-group-subtitle">${group.subtitle}</div>
+                <div class="history-group-title">${escapeHtml(group.title)}</div>
+                <div class="history-group-subtitle">${escapeHtml(group.subtitle)}</div>
             </div>
             <div class="history-group-totals">
                 ${group.shifts.length} shift${group.shifts.length === 1 ? '' : 's'}
@@ -823,6 +874,437 @@ function renderShiftHistory(shifts, groupBy) {
         group.shifts.forEach(shift => section.appendChild(createShiftCard(shift)));
         container.appendChild(section);
     });
+}
+
+function getPeriodTotals(periodShifts) {
+    return periodShifts.reduce((totals, shift) => {
+        const shiftTotals = getShiftTotals(shift);
+        totals.hours += shiftTotals.hours;
+        totals.tips += shiftTotals.totalTips;
+        return totals;
+    }, { hours: 0, tips: 0 });
+}
+
+function formatPeriodTotals(periodShifts) {
+    const totals = getPeriodTotals(periodShifts);
+    return `${periodShifts.length} shift${periodShifts.length === 1 ? '' : 's'} · ${formatCurrency(totals.hours)}h · $${formatCurrency(totals.tips)} tips`;
+}
+
+function getShiftsInWeek(shifts, monday) {
+    const start = toISODate(monday);
+    const end = toISODate(getSunday(monday));
+    return shifts.filter(shift => shift.date >= start && shift.date <= end);
+}
+
+function getShiftsInMonth(shifts, monthKey) {
+    return shifts.filter(shift => String(shift.date || '').startsWith(monthKey));
+}
+
+function getWeeksWithShifts(shifts, newestFirst) {
+    const weeks = new Map();
+    shifts.forEach(shift => {
+        const monday = getMonday(parseLocalDate(shift.date));
+        const key = toISODate(monday);
+        if (!weeks.has(key)) {
+            weeks.set(key, { key, monday, shifts: [] });
+        }
+        weeks.get(key).shifts.push(shift);
+    });
+
+    const list = Array.from(weeks.values());
+    list.sort((a, b) => newestFirst ? b.monday - a.monday : a.monday - b.monday);
+    return list;
+}
+
+function getMonthsWithShifts(shifts, newestFirst) {
+    const months = new Map();
+    shifts.forEach(shift => {
+        const key = String(shift.date || '').slice(0, 7);
+        if (!/^\d{4}-\d{2}$/.test(key)) return;
+        if (!months.has(key)) {
+            months.set(key, { key, date: parseMonthKey(key), shifts: [] });
+        }
+        months.get(key).shifts.push(shift);
+    });
+
+    const list = Array.from(months.values());
+    list.sort((a, b) => newestFirst ? b.date - a.date : a.date - b.date);
+    return list;
+}
+
+function ensureCalendarCursor(groupBy) {
+    if (calendarCursor) return;
+    if (groupBy === 'week') {
+        const monday = getSelectedWeekMonday();
+        calendarCursor = new Date(monday.getFullYear(), monday.getMonth(), 1);
+        return;
+    }
+    calendarCursor = parseMonthKey(getSelectedMonthKey());
+}
+
+function createPeriodNav({ title, subtitle, totalsText, onPrev, onNext }) {
+    const header = document.createElement('div');
+    header.className = 'history-period-header';
+
+    const nav = document.createElement('div');
+    nav.className = 'history-period-nav';
+
+    const prev = document.createElement('button');
+    prev.type = 'button';
+    prev.className = 'icon-button';
+    prev.setAttribute('aria-label', 'Previous');
+    prev.textContent = '‹';
+    prev.onclick = onPrev;
+
+    const next = document.createElement('button');
+    next.type = 'button';
+    next.className = 'icon-button';
+    next.setAttribute('aria-label', 'Next');
+    next.textContent = '›';
+    next.onclick = onNext;
+
+    const copy = document.createElement('div');
+    copy.className = 'history-period-copy';
+    copy.innerHTML = `
+        <div class="history-group-title">${escapeHtml(title)}</div>
+        <div class="history-group-subtitle">${escapeHtml(subtitle)}</div>
+    `;
+
+    nav.appendChild(prev);
+    nav.appendChild(copy);
+    nav.appendChild(next);
+
+    const totals = document.createElement('div');
+    totals.className = 'history-group-totals';
+    totals.textContent = totalsText;
+
+    header.appendChild(nav);
+    header.appendChild(totals);
+    return header;
+}
+
+function setHistoryPeriodBrowser(options) {
+    const slot = document.getElementById('historyPeriodBrowser');
+    if (!slot) return;
+
+    slot.innerHTML = '';
+    if (!options) {
+        slot.hidden = true;
+        return;
+    }
+
+    slot.hidden = false;
+    slot.appendChild(createPeriodNav(options));
+}
+
+function createHistoryPicker({ title, onToggle, renderBody }) {
+    const picker = document.createElement('div');
+    picker.className = 'history-picker';
+
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'collapsible-header history-picker-toggle';
+    toggle.id = 'historyPickerToggle';
+    toggle.setAttribute('aria-expanded', historyPickerOpen ? 'true' : 'false');
+    toggle.setAttribute('aria-controls', 'historyPicker');
+    toggle.innerHTML = `
+        <span class="card-title">${escapeHtml(title)}</span>
+        <span class="collapsible-icon" id="historyPickerIcon" aria-hidden="true">${historyPickerOpen ? '▴' : '▾'}</span>
+    `;
+    toggle.onclick = onToggle;
+
+    const body = document.createElement('div');
+    body.className = 'collapsible-content history-picker-body';
+    body.id = 'historyPicker';
+    body.hidden = !historyPickerOpen;
+    if (historyPickerOpen) {
+        renderBody(body);
+    }
+
+    picker.appendChild(toggle);
+    picker.appendChild(body);
+    return picker;
+}
+
+function toggleHistoryPicker() {
+    historyPickerOpen = !historyPickerOpen;
+    loadShifts();
+}
+
+function shiftCalendarMonth(delta) {
+    ensureCalendarCursor(getHistoryGroupBy());
+    calendarCursor = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth() + delta, 1);
+    historyPickerOpen = true;
+    loadShifts();
+}
+
+function shiftCalendarYear(delta) {
+    ensureCalendarCursor(getHistoryGroupBy());
+    calendarCursor = new Date(calendarCursor.getFullYear() + delta, 0, 1);
+    historyPickerOpen = true;
+    loadShifts();
+}
+
+function selectHistoryWeek(date) {
+    const monday = getMonday(date);
+    saveSelectedWeekMonday(monday);
+    calendarCursor = new Date(monday.getFullYear(), monday.getMonth(), 1);
+    loadShifts();
+}
+
+function selectHistoryMonth(monthKey) {
+    saveSelectedMonthKey(monthKey);
+    calendarCursor = parseMonthKey(monthKey);
+    loadShifts();
+}
+
+function stepHistoryWeek(delta) {
+    const monday = getSelectedWeekMonday();
+    const next = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + (delta * 7));
+    saveSelectedWeekMonday(getMonday(next));
+    calendarCursor = new Date(next.getFullYear(), next.getMonth(), 1);
+    loadShifts();
+}
+
+function stepHistoryMonth(delta) {
+    const current = parseMonthKey(getSelectedMonthKey());
+    const next = new Date(current.getFullYear(), current.getMonth() + delta, 1);
+    saveSelectedMonthKey(getMonthKey(next));
+    calendarCursor = new Date(next.getFullYear(), next.getMonth(), 1);
+    loadShifts();
+}
+
+function renderWeekHistory(container, shifts, newestFirst) {
+    ensureCalendarCursor('week');
+    const monday = getSelectedWeekMonday();
+    const weekShifts = getShiftsInWeek(shifts, monday).sort((a, b) => compareShiftsByDate(a, b, newestFirst));
+    const otherWeeks = getWeeksWithShifts(shifts, newestFirst).filter(week => week.key !== toISODate(monday));
+
+    const periodNav = {
+        title: formatWeekRange(monday),
+        subtitle: 'Work week · Monday–Sunday',
+        totalsText: formatPeriodTotals(weekShifts),
+        onPrev: () => stepHistoryWeek(-1),
+        onNext: () => stepHistoryWeek(1)
+    };
+    setHistoryPeriodBrowser(periodNav);
+
+    const section = document.createElement('div');
+    section.className = 'history-period';
+    section.appendChild(createPeriodNav(periodNav));
+
+    if (weekShifts.length === 0) {
+        const empty = document.createElement('p');
+        empty.className = 'empty-state';
+        empty.textContent = 'No shifts in this work week.';
+        section.appendChild(empty);
+    } else {
+        weekShifts.forEach(shift => section.appendChild(createShiftCard(shift)));
+    }
+
+    if (otherWeeks.length > 0) {
+        const heading = document.createElement('h3');
+        heading.className = 'history-picker-heading';
+        heading.textContent = 'Other weeks';
+        section.appendChild(heading);
+
+        const list = document.createElement('div');
+        list.className = 'week-choice-list';
+        otherWeeks.forEach(week => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'week-choice';
+            button.innerHTML = `
+                <span class="week-choice-title">${escapeHtml(formatWeekRange(week.monday))}</span>
+                <span class="week-choice-meta">${escapeHtml(formatPeriodTotals(week.shifts))}</span>
+            `;
+            button.onclick = () => selectHistoryWeek(week.monday);
+            list.appendChild(button);
+        });
+        section.appendChild(list);
+    }
+
+    section.appendChild(createHistoryPicker({
+        title: 'Calendar',
+        onToggle: toggleHistoryPicker,
+        renderBody: body => {
+            body.appendChild(renderWeekCalendar(shifts, monday));
+        }
+    }));
+
+    container.appendChild(section);
+}
+
+function renderMonthHistory(container, shifts, newestFirst) {
+    ensureCalendarCursor('month');
+    const monthKey = getSelectedMonthKey();
+    const monthDate = parseMonthKey(monthKey);
+    const monthShifts = getShiftsInMonth(shifts, monthKey).sort((a, b) => compareShiftsByDate(a, b, newestFirst));
+
+    const periodNav = {
+        title: formatMonthLabel(monthKey),
+        subtitle: 'Calendar month',
+        totalsText: formatPeriodTotals(monthShifts),
+        onPrev: () => stepHistoryMonth(-1),
+        onNext: () => stepHistoryMonth(1)
+    };
+    setHistoryPeriodBrowser(periodNav);
+
+    const section = document.createElement('div');
+    section.className = 'history-period';
+    section.appendChild(createPeriodNav(periodNav));
+
+    if (monthShifts.length === 0) {
+        const empty = document.createElement('p');
+        empty.className = 'empty-state';
+        empty.textContent = 'No shifts in this month.';
+        section.appendChild(empty);
+    } else {
+        monthShifts.forEach(shift => section.appendChild(createShiftCard(shift)));
+    }
+
+    section.appendChild(createHistoryPicker({
+        title: 'Calendar',
+        onToggle: toggleHistoryPicker,
+        renderBody: body => {
+            body.appendChild(renderMonthCalendar(shifts, monthKey));
+        }
+    }));
+
+    container.appendChild(section);
+}
+
+function renderWeekCalendar(shifts, selectedMonday) {
+    const wrap = document.createElement('div');
+    wrap.className = 'history-calendar';
+
+    const cursor = calendarCursor || new Date(selectedMonday.getFullYear(), selectedMonday.getMonth(), 1);
+    const year = cursor.getFullYear();
+    const month = cursor.getMonth();
+    const selectedKey = toISODate(selectedMonday);
+    const selectedEnd = toISODate(getSunday(selectedMonday));
+    const shiftDates = new Set(shifts.map(shift => shift.date));
+    const todayKey = toISODate(new Date());
+
+    const header = document.createElement('div');
+    header.className = 'calendar-header';
+
+    const prev = document.createElement('button');
+    prev.type = 'button';
+    prev.className = 'icon-button';
+    prev.setAttribute('aria-label', 'Previous month');
+    prev.textContent = '‹';
+    prev.onclick = () => shiftCalendarMonth(-1);
+
+    const next = document.createElement('button');
+    next.type = 'button';
+    next.className = 'icon-button';
+    next.setAttribute('aria-label', 'Next month');
+    next.textContent = '›';
+    next.onclick = () => shiftCalendarMonth(1);
+
+    const label = document.createElement('div');
+    label.className = 'calendar-label';
+    label.textContent = cursor.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+    header.appendChild(prev);
+    header.appendChild(label);
+    header.appendChild(next);
+
+    const weekdays = document.createElement('div');
+    weekdays.className = 'calendar-weekdays';
+    ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].forEach(day => {
+        const cell = document.createElement('div');
+        cell.textContent = day;
+        weekdays.appendChild(cell);
+    });
+
+    const grid = document.createElement('div');
+    grid.className = 'calendar-grid';
+
+    const first = new Date(year, month, 1);
+    const start = getMonday(first);
+    const last = new Date(year, month + 1, 0);
+    const end = getSunday(last);
+
+    for (let cursorDay = new Date(start); cursorDay <= end; cursorDay.setDate(cursorDay.getDate() + 1)) {
+        const date = new Date(cursorDay.getFullYear(), cursorDay.getMonth(), cursorDay.getDate());
+        const key = toISODate(date);
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'calendar-day';
+        if (date.getMonth() !== month) button.classList.add('outside');
+        if (key >= selectedKey && key <= selectedEnd) button.classList.add('in-week');
+        if (shiftDates.has(key)) button.classList.add('has-shifts');
+        if (key === todayKey) button.classList.add('today');
+        button.textContent = String(date.getDate());
+        button.setAttribute('aria-label', date.toLocaleDateString('en-US', {
+            weekday: 'long',
+            month: 'long',
+            day: 'numeric',
+            year: 'numeric'
+        }));
+        button.onclick = () => selectHistoryWeek(date);
+        grid.appendChild(button);
+    }
+
+    wrap.appendChild(header);
+    wrap.appendChild(weekdays);
+    wrap.appendChild(grid);
+    return wrap;
+}
+
+function renderMonthCalendar(shifts, selectedMonthKey) {
+    const wrap = document.createElement('div');
+    wrap.className = 'history-calendar';
+
+    const cursor = calendarCursor || parseMonthKey(selectedMonthKey);
+    const year = cursor.getFullYear();
+    const monthsWithShifts = new Set(getMonthsWithShifts(shifts, true).map(month => month.key));
+
+    const header = document.createElement('div');
+    header.className = 'calendar-header';
+
+    const prev = document.createElement('button');
+    prev.type = 'button';
+    prev.className = 'icon-button';
+    prev.setAttribute('aria-label', 'Previous year');
+    prev.textContent = '‹';
+    prev.onclick = () => shiftCalendarYear(-1);
+
+    const next = document.createElement('button');
+    next.type = 'button';
+    next.className = 'icon-button';
+    next.setAttribute('aria-label', 'Next year');
+    next.textContent = '›';
+    next.onclick = () => shiftCalendarYear(1);
+
+    const label = document.createElement('div');
+    label.className = 'calendar-label';
+    label.textContent = String(year);
+
+    header.appendChild(prev);
+    header.appendChild(label);
+    header.appendChild(next);
+
+    const grid = document.createElement('div');
+    grid.className = 'month-grid';
+
+    for (let month = 0; month < 12; month += 1) {
+        const key = `${year}-${String(month + 1).padStart(2, '0')}`;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'month-choice';
+        if (key === selectedMonthKey) button.classList.add('active');
+        if (monthsWithShifts.has(key)) button.classList.add('has-shifts');
+        button.textContent = new Date(year, month, 1).toLocaleDateString('en-US', { month: 'short' });
+        button.onclick = () => selectHistoryMonth(key);
+        grid.appendChild(button);
+    }
+
+    wrap.appendChild(header);
+    wrap.appendChild(grid);
+    return wrap;
 }
 
 function groupShifts(shifts, groupBy, newestFirst) {
@@ -1303,6 +1785,7 @@ function resetShiftForm() {
     document.getElementById('shiftFormTitle').textContent = 'Log New Shift';
     document.getElementById('saveShiftButton').textContent = 'Save Shift';
     document.getElementById('cancelEditButton').hidden = true;
+    setShiftFormCollapsed(true);
 }
 
 async function deleteShift(timestamp) {
