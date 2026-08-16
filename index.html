@@ -3,47 +3,83 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ShiftStats - Bartending Shift Tracker</title>
+    <title>Shift Tracker</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+    <nav class="top-nav">
+        <div class="nav-inner">
+            <div class="nav-menu">
+                <button type="button" id="navMenuButton" class="nav-menu-button" aria-haspopup="true" aria-expanded="false" onclick="toggleNavMenu(event)">
+                    Menu
+                    <span class="nav-menu-caret" aria-hidden="true">▾</span>
+                </button>
+                <div id="navDropdown" class="nav-dropdown" hidden>
+                    <button type="button" class="nav-dropdown-item" data-panel="settings" onclick="openNavPanel('settings')">Settings</button>
+                    <button type="button" class="nav-dropdown-item" data-panel="statistics" onclick="openNavPanel('statistics')">Statistics</button>
+                    <button type="button" class="nav-dropdown-item" data-panel="duebacks" onclick="openNavPanel('duebacks')">Weekly Duebacks</button>
+                </div>
+            </div>
+            <button type="button" class="nav-export-button" onclick="exportData()">Export JSON</button>
+        </div>
+    </nav>
+
     <div class="container">
         <header>
-            <h1>🍸 ShiftStats</h1>
-            <p class="subtitle">Track your bartending shifts and earnings</p>
+            <h1 id="pageNameHeading">Larry</h1>
+            <h2 class="page-subheading">Shift Tracker</h2>
+            <p class="page-tagline">“Because you're a professional....sort of.”</p>
         </header>
 
         <div class="main-content">
-            <!-- Settings Panel -->
-            <section class="card settings-panel collapsible">
-                <div class="collapsible-header" onclick="toggleCollapsible('settings')">
-                    <h2>Settings</h2>
-                    <span class="collapsible-icon" id="settingsIcon">▼</span>
-                </div>
-                <div class="collapsible-content" id="settingsContent" style="display: none;">
+            <section class="card settings-panel nav-panel" id="settingsSection">
+                <h2>Settings</h2>
+                <div id="settingsContent">
+                    <div class="form-group">
+                        <label for="profileName">Your name:</label>
+                        <div class="input-group">
+                            <input type="text" id="profileName" placeholder="Larry" autocomplete="name">
+                            <button type="button" onclick="submitNameChange()" class="btn btn-secondary">Save name</button>
+                        </div>
+                        <small class="form-hint">A new name starts a separate log. Previous names and their shifts are kept.</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Saved logs</label>
+                        <div id="savedNamesList" class="tag-list"></div>
+                    </div>
                     <div class="form-group">
                         <label for="minWage">Ontario Minimum Wage ($/hour):</label>
-                        <input type="number" id="minWage" step="0.01" value="16.55" min="0">
-                    </div>
-                    <div class="form-group">
-                        <label for="newEmployee">Add Employee:</label>
-                        <div class="input-group">
-                            <input type="text" id="newEmployee" placeholder="Employee name">
-                            <button onclick="addEmployee()" class="btn btn-secondary">Add</button>
-                        </div>
-                    </div>
-                    <div class="settings-lists">
-                        <div class="list-group">
-                            <h3>Employees</h3>
-                            <ul id="employeeList" class="tag-list"></ul>
-                        </div>
+                        <input type="number" id="minWage" step="0.01" value="17.60" min="0">
                     </div>
                 </div>
             </section>
 
+            <section class="card nav-panel" id="statsSection">
+                <h2>Statistics</h2>
+                <div id="statsContent">
+                    <div class="stats-tabs">
+                        <button class="stat-tab active" onclick="showStatsPeriod('week')">Week</button>
+                        <button class="stat-tab" onclick="showStatsPeriod('month')">Month</button>
+                        <button class="stat-tab" onclick="showStatsPeriod('year')">Year</button>
+                        <button class="stat-tab" onclick="showStatsPeriod('all')">All Time</button>
+                    </div>
+                    <div id="statsContentInner" class="stats-content"></div>
+                </div>
+            </section>
+
+            <section class="card nav-panel" id="duebacksSection">
+                <div class="section-header">
+                    <h2>Weekly Duebacks</h2>
+                    <div id="duebacksOutstanding" class="duebacks-outstanding"></div>
+                </div>
+                <p class="form-hint">Duebacks are totaled by work week (Monday–Sunday). Check a week off once you have collected it.</p>
+                <div id="duebacksContainer"></div>
+            </section>
+
             <!-- Shift Entry Form -->
             <section class="card">
-                <h2>Log New Shift</h2>
+                <h2 id="shiftFormTitle">Log New Shift</h2>
                 <form id="shiftForm" onsubmit="handleSubmit(event)">
                     <div class="form-row">
                         <div class="form-group">
@@ -58,15 +94,9 @@
                         </div>
                     </div>
 
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="hours">Hours Worked:</label>
-                            <input type="number" id="hours" step="0.25" min="0" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="grossSales">Gross Sales ($):</label>
-                            <input type="number" id="grossSales" step="0.01" min="0" required>
-                        </div>
+                    <div class="form-group">
+                        <label for="hours">Hours Worked:</label>
+                        <input type="number" id="hours" step="0.25" min="0" required>
                     </div>
 
                     <div class="form-row">
@@ -81,42 +111,16 @@
                     </div>
 
                     <div class="form-group">
-                        <label>Worked With:</label>
-                        <div id="employeeButtons" class="employee-buttons"></div>
-                        <small class="form-hint">Click/tap employees to select. Selected employees will be highlighted. Leave all unselected if you worked alone.</small>
-                        <div id="selectedEmployees" class="selected-employees"></div>
+                        <label for="shiftNote">Note (optional):</label>
+                        <textarea id="shiftNote" rows="3" placeholder="Add a note about this shift"></textarea>
                     </div>
 
-                    <button type="submit" class="btn btn-primary">Save Shift</button>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary" id="saveShiftButton">Save Shift</button>
+                        <button type="button" class="btn btn-secondary" onclick="handleSaveAndExport()">Export to Device</button>
+                        <button type="button" class="btn btn-secondary" id="cancelEditButton" onclick="cancelEdit()" hidden>Cancel edit</button>
+                    </div>
                 </form>
-            </section>
-
-            <!-- Total Stats Baseball Card -->
-            <section class="card" id="totalStatsCard" style="display: none;">
-                <div class="baseball-card">
-                    <div class="card-header">
-                        <h2>Thomas</h2>
-                        <div class="card-subtitle">Career Stats</div>
-                    </div>
-                    <div id="totalStatsContent" class="baseball-card-stats"></div>
-                </div>
-            </section>
-
-            <!-- Statistics Section -->
-            <section class="card collapsible" id="statsSection" style="display: none;">
-                <div class="collapsible-header" onclick="toggleCollapsible('stats')">
-                    <h2>Period Statistics</h2>
-                    <span class="collapsible-icon" id="statsIcon">▼</span>
-                </div>
-                <div class="collapsible-content" id="statsContent" style="display: none;">
-                    <div class="stats-tabs">
-                        <button class="stat-tab active" onclick="showStatsPeriod('week')">Week</button>
-                        <button class="stat-tab" onclick="showStatsPeriod('month')">Month</button>
-                        <button class="stat-tab" onclick="showStatsPeriod('year')">Year</button>
-                        <button class="stat-tab" onclick="showStatsPeriod('all')">All Time</button>
-                    </div>
-                    <div id="statsContentInner" class="stats-content"></div>
-                </div>
             </section>
 
             <!-- Shift Records -->
@@ -124,8 +128,27 @@
                 <div class="section-header">
                     <h2>Shift History</h2>
                     <div class="actions">
-                        <button onclick="exportData()" class="btn btn-secondary btn-small">Export Data</button>
+                        <button onclick="exportData()" class="btn btn-secondary btn-small">Export JSON</button>
+                        <button onclick="exportCsv()" class="btn btn-secondary btn-small">Export CSV</button>
                         <button onclick="importData()" class="btn btn-secondary btn-small">Import Data</button>
+                    </div>
+                </div>
+                <div class="history-filters">
+                    <div class="history-organize">
+                        <label for="historyGroupBy">Organize by</label>
+                        <select id="historyGroupBy" onchange="setHistoryGroupBy(this.value)">
+                            <option value="week">Work week (Mon–Sun)</option>
+                            <option value="all">All shifts</option>
+                            <option value="month">Month</option>
+                            <option value="venue">Venue</option>
+                        </select>
+                    </div>
+                    <div class="history-organize">
+                        <label for="historySort">Sort</label>
+                        <select id="historySort" onchange="setHistorySort(this.value)">
+                            <option value="newest">Newest first</option>
+                            <option value="oldest">Oldest first</option>
+                        </select>
                     </div>
                 </div>
                 <div id="recordsContainer">
@@ -133,10 +156,38 @@
                 </div>
             </section>
         </div>
+
+        <footer class="app-footer">
+            <button type="button" class="btn btn-secondary" onclick="clearCache()">Clear Cache</button>
+            <p class="form-hint">Deletes all shift data saved in this browser on this device.</p>
+        </footer>
     </div>
 
     <!-- Hidden file input for import -->
     <input type="file" id="importFile" accept=".json" style="display: none;" onchange="handleFileImport(event)">
+
+    <div id="namePrompt" class="name-prompt" hidden>
+        <div class="name-prompt-card">
+            <h2>What’s your name?</h2>
+            <p>Your shift log will be saved under this name on this device.</p>
+            <form id="namePromptForm" onsubmit="submitFirstName(event)">
+                <label for="firstNameInput">Name</label>
+                <input type="text" id="firstNameInput" placeholder="Larry" autocomplete="name">
+                <button type="submit" class="btn btn-primary">Continue</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="appDialog" class="app-dialog" hidden>
+        <div class="app-dialog-card" role="alertdialog" aria-labelledby="appDialogTitle" aria-describedby="appDialogMessage">
+            <h2 id="appDialogTitle">Just So You Know...</h2>
+            <p id="appDialogMessage"></p>
+            <div class="app-dialog-actions">
+                <button type="button" id="appDialogCancel" class="btn btn-secondary" onclick="closeAppDialog(false)">Cancel</button>
+                <button type="button" id="appDialogConfirm" class="btn btn-primary" onclick="closeAppDialog(true)">OK</button>
+            </div>
+        </div>
+    </div>
 
     <script src="script.js"></script>
 </body>
