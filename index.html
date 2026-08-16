@@ -6,6 +6,12 @@
     <title>Shift Tracker</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="stylesheet" href="styles.css">
+    <script>
+        document.documentElement.setAttribute(
+            'data-theme',
+            localStorage.getItem('shiftStats_theme') || 'linen'
+        );
+    </script>
 </head>
 <body>
     <nav class="top-nav">
@@ -26,6 +32,104 @@
     </nav>
 
     <div class="container">
+        <section class="card settings-panel nav-panel" id="settingsSection">
+            <div class="panel-header">
+                <h2>Settings</h2>
+                <button type="button" class="panel-close" onclick="closeNavPanel()" aria-label="Close Settings">×</button>
+            </div>
+            <div id="settingsContent">
+                <div class="form-group">
+                    <label for="profileName">Your name:</label>
+                    <div class="input-group">
+                        <input type="text" id="profileName" placeholder="Larry" autocomplete="name">
+                        <button type="button" onclick="submitNameChange()" class="btn btn-secondary">Save name</button>
+                    </div>
+                    <small class="form-hint">A new name starts a separate log. Previous names and their shifts are kept.</small>
+                </div>
+                <div class="form-group">
+                    <label>Saved logs</label>
+                    <div id="savedNamesList" class="tag-list"></div>
+                </div>
+                <div class="form-group">
+                    <label for="minWage">Hourly Wage</label>
+                    <input type="number" id="minWage" step="0.01" value="17.60" min="0">
+                </div>
+                <div class="form-group">
+                    <label for="newVenue">Venues</label>
+                    <div class="input-group">
+                        <input type="text" id="newVenue" placeholder="Venue name">
+                        <button type="button" onclick="addVenue()" class="btn btn-secondary">Add venue</button>
+                    </div>
+                    <ul id="venueList" class="tag-list"></ul>
+                </div>
+                <div class="form-group">
+                    <label>Colour palette</label>
+                    <div class="theme-options" id="themeOptions">
+                        <button type="button" class="theme-swatch" data-theme="linen" onclick="setTheme('linen')">
+                            <span class="theme-swatch-preview" aria-hidden="true"></span>
+                            Linen
+                        </button>
+                        <button type="button" class="theme-swatch" data-theme="dusk" onclick="setTheme('dusk')">
+                            <span class="theme-swatch-preview" aria-hidden="true"></span>
+                            Dusk
+                        </button>
+                        <button type="button" class="theme-swatch" data-theme="slate" onclick="setTheme('slate')">
+                            <span class="theme-swatch-preview" aria-hidden="true"></span>
+                            Slate
+                        </button>
+                        <button type="button" class="theme-swatch" data-theme="blush" onclick="setTheme('blush')">
+                            <span class="theme-swatch-preview" aria-hidden="true"></span>
+                            Blush
+                        </button>
+                        <button type="button" class="theme-swatch" data-theme="sage" onclick="setTheme('sage')">
+                            <span class="theme-swatch-preview" aria-hidden="true"></span>
+                            Sage
+                        </button>
+                        <button type="button" class="theme-swatch" data-theme="sand" onclick="setTheme('sand')">
+                            <span class="theme-swatch-preview" aria-hidden="true"></span>
+                            Sand
+                        </button>
+                        <button type="button" class="theme-swatch" data-theme="lavender" onclick="setTheme('lavender')">
+                            <span class="theme-swatch-preview" aria-hidden="true"></span>
+                            Lavender
+                        </button>
+                        <button type="button" class="theme-swatch" data-theme="sea" onclick="setTheme('sea')">
+                            <span class="theme-swatch-preview" aria-hidden="true"></span>
+                            Sea
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="card nav-panel" id="statsSection">
+            <div class="panel-header">
+                <h2>Statistics</h2>
+                <button type="button" class="panel-close" onclick="closeNavPanel()" aria-label="Close Statistics">×</button>
+            </div>
+            <div id="statsContent">
+                <div class="stats-tabs">
+                    <button class="stat-tab active" onclick="showStatsPeriod('week')">Week</button>
+                    <button class="stat-tab" onclick="showStatsPeriod('month')">Month</button>
+                    <button class="stat-tab" onclick="showStatsPeriod('year')">Year</button>
+                    <button class="stat-tab" onclick="showStatsPeriod('all')">All Time</button>
+                </div>
+                <div id="statsContentInner" class="stats-content"></div>
+            </div>
+        </section>
+
+        <section class="card nav-panel" id="duebacksSection">
+            <div class="panel-header">
+                <div>
+                    <h2>Weekly Duebacks</h2>
+                    <div id="duebacksOutstanding" class="duebacks-outstanding"></div>
+                </div>
+                <button type="button" class="panel-close" onclick="closeNavPanel()" aria-label="Close Weekly Duebacks">×</button>
+            </div>
+            <p class="form-hint">Duebacks are totaled by work week (Monday–Sunday). Check a week off once you have collected it.</p>
+            <div id="duebacksContainer"></div>
+        </section>
+
         <header>
             <h1 id="pageNameHeading">Larry</h1>
             <h2 class="page-subheading">Shift Tracker</h2>
@@ -33,50 +137,6 @@
         </header>
 
         <div class="main-content">
-            <section class="card settings-panel nav-panel" id="settingsSection">
-                <h2>Settings</h2>
-                <div id="settingsContent">
-                    <div class="form-group">
-                        <label for="profileName">Your name:</label>
-                        <div class="input-group">
-                            <input type="text" id="profileName" placeholder="Larry" autocomplete="name">
-                            <button type="button" onclick="submitNameChange()" class="btn btn-secondary">Save name</button>
-                        </div>
-                        <small class="form-hint">A new name starts a separate log. Previous names and their shifts are kept.</small>
-                    </div>
-                    <div class="form-group">
-                        <label>Saved logs</label>
-                        <div id="savedNamesList" class="tag-list"></div>
-                    </div>
-                    <div class="form-group">
-                        <label for="minWage">Ontario Minimum Wage ($/hour):</label>
-                        <input type="number" id="minWage" step="0.01" value="17.60" min="0">
-                    </div>
-                </div>
-            </section>
-
-            <section class="card nav-panel" id="statsSection">
-                <h2>Statistics</h2>
-                <div id="statsContent">
-                    <div class="stats-tabs">
-                        <button class="stat-tab active" onclick="showStatsPeriod('week')">Week</button>
-                        <button class="stat-tab" onclick="showStatsPeriod('month')">Month</button>
-                        <button class="stat-tab" onclick="showStatsPeriod('year')">Year</button>
-                        <button class="stat-tab" onclick="showStatsPeriod('all')">All Time</button>
-                    </div>
-                    <div id="statsContentInner" class="stats-content"></div>
-                </div>
-            </section>
-
-            <section class="card nav-panel" id="duebacksSection">
-                <div class="section-header">
-                    <h2>Weekly Duebacks</h2>
-                    <div id="duebacksOutstanding" class="duebacks-outstanding"></div>
-                </div>
-                <p class="form-hint">Duebacks are totaled by work week (Monday–Sunday). Check a week off once you have collected it.</p>
-                <div id="duebacksContainer"></div>
-            </section>
-
             <!-- Shift Entry Form -->
             <section class="card">
                 <h2 id="shiftFormTitle">Log New Shift</h2>

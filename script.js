@@ -5,14 +5,17 @@ const STORAGE_KEYS = {
     HISTORY_GROUP: 'shiftStats_historyGroup',
     DUEBACKS_COLLECTED: 'shiftStats_duebacksCollected',
     PROFILES: 'shiftStats_profiles',
-    CURRENT_NAME: 'shiftStats_currentName'
+    CURRENT_NAME: 'shiftStats_currentName',
+    THEME: 'shiftStats_theme'
 };
 
 const DEFAULT_MIN_WAGE = 17.60;
 const PREVIOUS_DEFAULT_MIN_WAGE = '16.55';
 const DEFAULT_NAME = 'Larry';
+const DEFAULT_THEME = 'linen';
+const THEMES = ['linen', 'dusk', 'slate', 'blush', 'sage', 'sand', 'lavender', 'sea'];
 
-const VENUES = ['Hole', 'Bothams'];
+const DEFAULT_VENUES = ['Hole', 'Bothams'];
 
 let currentStatsPeriod = 'week';
 let activeNavPanel = null;
@@ -74,7 +77,8 @@ function createEmptyProfile(displayName) {
         minWage: DEFAULT_MIN_WAGE,
         historyGroup: 'week',
         historySort: 'newest',
-        collectedDuebacks: {}
+        collectedDuebacks: {},
+        venues: DEFAULT_VENUES.slice()
     };
 }
 
@@ -136,7 +140,8 @@ function initializeData() {
             shifts: JSON.parse(localStorage.getItem(STORAGE_KEYS.SHIFTS) || '[]'),
             minWage,
             historyGroup: localStorage.getItem(STORAGE_KEYS.HISTORY_GROUP) || 'week',
-            collectedDuebacks: JSON.parse(localStorage.getItem(STORAGE_KEYS.DUEBACKS_COLLECTED) || '{}')
+            collectedDuebacks: JSON.parse(localStorage.getItem(STORAGE_KEYS.DUEBACKS_COLLECTED) || '{}'),
+            venues: DEFAULT_VENUES.slice()
         };
         saveProfiles(profiles);
         setCurrentName(name);
@@ -173,7 +178,18 @@ function getShifts() {
 }
 
 function getVenues() {
-    return VENUES;
+    const profile = getCurrentProfile();
+    const stored = Array.isArray(profile.venues) ? profile.venues : DEFAULT_VENUES;
+    const venues = [...new Set(stored.map(normalizeVenueName).filter(Boolean))];
+    return venues.length > 0 ? venues : DEFAULT_VENUES.slice();
+}
+
+function saveVenues(venues) {
+    updateCurrentProfile({ venues });
+}
+
+function normalizeVenueName(name) {
+    return (name || '').trim().replace(/\s+/g, ' ');
 }
 
 function getMinWage() {
@@ -202,6 +218,47 @@ function saveHistoryGroupBy(groupBy) {
 
 function saveHistorySort(sortOrder) {
     updateCurrentProfile({ historySort: sortOrder });
+}
+
+function getTheme() {
+    const stored = localStorage.getItem(STORAGE_KEYS.THEME);
+    return THEMES.includes(stored) ? stored : DEFAULT_THEME;
+}
+
+function applyTheme(theme) {
+    const nextTheme = THEMES.includes(theme) ? theme : DEFAULT_THEME;
+    document.documentElement.setAttribute('data-theme', nextTheme);
+    updateNavOffset();
+    renderThemeOptions();
+}
+
+function setTheme(theme) {
+    const nextTheme = THEMES.includes(theme) ? theme : DEFAULT_THEME;
+    localStorage.setItem(STORAGE_KEYS.THEME, nextTheme);
+    applyTheme(nextTheme);
+}
+
+function renderThemeOptions() {
+    const current = getTheme();
+    document.querySelectorAll('.theme-swatch').forEach(button => {
+        button.classList.toggle('active', button.dataset.theme === current);
+    });
+}
+
+function updateNavOffset() {
+    const nav = document.querySelector('.top-nav');
+    if (!nav) return;
+    const height = Math.ceil(nav.getBoundingClientRect().height);
+    document.documentElement.style.setProperty('--nav-offset', `${height}px`);
+}
+
+function scrollPanelIntoView(section) {
+    if (!section) return;
+    updateNavOffset();
+    const nav = document.querySelector('.top-nav');
+    const navHeight = nav ? nav.getBoundingClientRect().height : 0;
+    const top = window.scrollY + section.getBoundingClientRect().top - navHeight - 8;
+    window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
 }
 
 function getCollectedDuebacks() {
@@ -266,6 +323,7 @@ function renderSavedNames() {
 function refreshProfileView() {
     updateActiveNameDisplay();
     renderSavedNames();
+    renderVenueList();
     document.getElementById('minWage').value = getMinWage();
     loadVenues();
     loadShifts();
@@ -358,6 +416,11 @@ function closeNavMenu() {
     if (button) button.setAttribute('aria-expanded', 'false');
 }
 
+function closeNavPanel() {
+    activeNavPanel = null;
+    applyNavPanelVisibility();
+}
+
 function openNavPanel(panel) {
     closeNavMenu();
     activeNavPanel = activeNavPanel === panel ? null : panel;
@@ -373,7 +436,7 @@ function openNavPanel(panel) {
 
     const section = document.getElementById(getNavPanelId(activeNavPanel));
     if (section) {
-        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        scrollPanelIntoView(section);
     }
 }
 
@@ -413,6 +476,8 @@ function startApp() {
     document.getElementById('minWage').value = getMinWage();
     document.getElementById('profileName').value = getCurrentName();
     renderSavedNames();
+    renderThemeOptions();
+    renderVenueList();
     updateActiveNameDisplay();
     loadVenues();
     loadShifts();
@@ -489,6 +554,7 @@ function loadVenues() {
         return;
     }
 
+    const selected = venueSelect.value;
     venueSelect.innerHTML = '<option value="">Select venue...</option>';
     venues.forEach(venue => {
         const option = document.createElement('option');
@@ -496,6 +562,71 @@ function loadVenues() {
         option.textContent = venue;
         venueSelect.appendChild(option);
     });
+
+    if (venues.includes(selected)) {
+        venueSelect.value = selected;
+    }
+}
+
+function renderVenueList() {
+    const list = document.getElementById('venueList');
+    if (!list) return;
+
+    list.innerHTML = '';
+    getVenues().forEach(venue => {
+        const item = document.createElement('li');
+        item.className = 'tag';
+        item.appendChild(document.createTextNode(venue));
+
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.setAttribute('aria-label', `Delete ${venue}`);
+        button.textContent = '×';
+        button.onclick = () => removeVenue(venue);
+        item.appendChild(button);
+        list.appendChild(item);
+    });
+}
+
+async function addVenue() {
+    const input = document.getElementById('newVenue');
+    const name = normalizeVenueName(input && input.value);
+    if (!name) {
+        await showAppAlert('Please enter a venue name');
+        return;
+    }
+
+    const venues = getVenues();
+    if (venues.some(venue => venue.toLowerCase() === name.toLowerCase())) {
+        await showAppAlert('That venue already exists');
+        return;
+    }
+
+    saveVenues([...venues, name]);
+    input.value = '';
+    renderVenueList();
+    loadVenues();
+}
+
+async function removeVenue(venueName) {
+    const matchingShifts = getShifts().filter(shift => shift.venue === venueName);
+    if (matchingShifts.length > 0) {
+        const confirmed = await showAppConfirm(
+            `Delete ${venueName}? This will also delete ${matchingShifts.length} saved shift${matchingShifts.length === 1 ? '' : 's'} at that venue.`
+        );
+        if (!confirmed) return;
+
+        const remainingShifts = getShifts().filter(shift => shift.venue !== venueName);
+        saveShifts(remainingShifts);
+        if (editingTimestamp && matchingShifts.some(shift => shift.timestamp === editingTimestamp)) {
+            resetShiftForm();
+        }
+    }
+
+    saveVenues(getVenues().filter(venue => venue !== venueName));
+    renderVenueList();
+    loadVenues();
+    loadShifts();
 }
 
 function setHistoryGroupBy(groupBy) {
@@ -1122,6 +1253,7 @@ function exportData() {
         shifts: getShifts(),
         minWage: getMinWage(),
         collectedDuebacks: getCollectedDuebacks(),
+        theme: getTheme(),
         exportDate: new Date().toISOString()
     };
 
@@ -1196,9 +1328,14 @@ function handleFileImport(event) {
                     saveCollectedDuebacks(data.collectedDuebacks);
                 }
             }
+            if (data.theme) {
+                setTheme(data.theme);
+            }
 
             document.getElementById('minWage').value = getMinWage();
             renderSavedNames();
+            renderThemeOptions();
+            renderVenueList();
             updateActiveNameDisplay();
             loadVenues();
             loadShifts();
@@ -1286,12 +1423,21 @@ function showStatsPeriod(period) {
 
 document.addEventListener('DOMContentLoaded', function() {
     initializeData();
+    applyTheme(getTheme());
+    updateNavOffset();
+    window.addEventListener('resize', updateNavOffset);
 
     document.getElementById('minWage').addEventListener('change', updateMinWage);
     document.getElementById('profileName').addEventListener('keydown', function(event) {
         if (event.key === 'Enter') {
             event.preventDefault();
             submitNameChange();
+        }
+    });
+    document.getElementById('newVenue').addEventListener('keydown', function(event) {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            addVenue();
         }
     });
     document.addEventListener('click', function(event) {
@@ -1301,7 +1447,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     document.addEventListener('keydown', function(event) {
-    document.addEventListener('keydown', function(event) {
         if (event.key !== 'Escape') return;
         const dialog = document.getElementById('appDialog');
         if (dialog && !dialog.hidden) {
@@ -1309,7 +1454,6 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         closeNavMenu();
-    });
     });
 
     applyNavPanelVisibility();
