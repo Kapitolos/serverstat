@@ -12,7 +12,7 @@ const STORAGE_KEYS = {
 const DEFAULT_MIN_WAGE = 17.60;
 const PREVIOUS_DEFAULT_MIN_WAGE = '16.55';
 const DEFAULT_NAME = 'Larry';
-const DEFAULT_THEME = 'linen';
+const DEFAULT_THEME = 'dusk';
 const THEMES = ['linen', 'dusk', 'slate', 'blush', 'sage', 'sand', 'lavender', 'sea'];
 
 const DEFAULT_VENUES = ['Hole', 'Bothams'];
