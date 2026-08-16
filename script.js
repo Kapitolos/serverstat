@@ -78,7 +78,8 @@ function createEmptyProfile(displayName) {
         historyGroup: 'week',
         historySort: 'newest',
         collectedDuebacks: {},
-        venues: DEFAULT_VENUES.slice()
+        venues: DEFAULT_VENUES.slice(),
+        venueWages: {}
     };
 }
 
@@ -141,7 +142,8 @@ function initializeData() {
             minWage,
             historyGroup: localStorage.getItem(STORAGE_KEYS.HISTORY_GROUP) || 'week',
             collectedDuebacks: JSON.parse(localStorage.getItem(STORAGE_KEYS.DUEBACKS_COLLECTED) || '{}'),
-            venues: DEFAULT_VENUES.slice()
+            venues: DEFAULT_VENUES.slice(),
+            venueWages: {}
         };
         saveProfiles(profiles);
         setCurrentName(name);
@@ -192,8 +194,29 @@ function normalizeVenueName(name) {
     return (name || '').trim().replace(/\s+/g, ' ');
 }
 
-function getMinWage() {
+function getDefaultMinWage() {
     return parseFloat(getCurrentProfile().minWage) || DEFAULT_MIN_WAGE;
+}
+
+function getVenueWages() {
+    const wages = getCurrentProfile().venueWages;
+    return wages && typeof wages === 'object' ? { ...wages } : {};
+}
+
+function saveVenueWages(venueWages) {
+    updateCurrentProfile({ venueWages });
+}
+
+function getMinWage(venue) {
+    const defaultWage = getDefaultMinWage();
+    if (!venue) return defaultWage;
+
+    const wages = getVenueWages();
+    const match = Object.keys(wages).find(name => name.toLowerCase() === String(venue).toLowerCase());
+    if (!match) return defaultWage;
+
+    const wage = parseFloat(wages[match]);
+    return Number.isFinite(wage) && wage >= 0 ? wage : defaultWage;
 }
 
 function getHistoryGroupBy() {
@@ -416,6 +439,50 @@ function closeNavMenu() {
     if (button) button.setAttribute('aria-expanded', 'false');
 }
 
+function isShiftFormCollapsed() {
+    return document.getElementById('shiftFormSection')?.classList.contains('is-collapsed');
+}
+
+function setShiftFormCollapsed(collapsed) {
+    const section = document.getElementById('shiftFormSection');
+    const content = document.getElementById('shiftFormContent');
+    const toggle = document.getElementById('shiftFormToggle');
+    const icon = document.getElementById('shiftFormIcon');
+    if (!section || !content || !toggle) return;
+
+    section.classList.toggle('is-collapsed', collapsed);
+    content.hidden = collapsed;
+    toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    if (icon) icon.textContent = collapsed ? '▾' : '▴';
+}
+
+function toggleShiftForm() {
+    setShiftFormCollapsed(!isShiftFormCollapsed());
+}
+
+function updateHistoryToolbarState() {
+    const section = document.getElementById('historySection');
+    const diskButton = document.getElementById('historyDiskButton');
+    const filterButton = document.getElementById('historyFilterButton');
+    if (!section || !diskButton || !filterButton) return;
+
+    const diskOpen = section.classList.contains('is-disk-open');
+    const filterOpen = section.classList.contains('is-filter-open');
+    diskButton.setAttribute('aria-expanded', diskOpen ? 'true' : 'false');
+    filterButton.setAttribute('aria-expanded', filterOpen ? 'true' : 'false');
+}
+
+function toggleHistoryPanel(panel) {
+    const section = document.getElementById('historySection');
+    if (!section || (panel !== 'disk' && panel !== 'filter')) return;
+
+    const className = panel === 'disk' ? 'is-disk-open' : 'is-filter-open';
+    const willOpen = !section.classList.contains(className);
+    section.classList.remove('is-disk-open', 'is-filter-open');
+    if (willOpen) section.classList.add(className);
+    updateHistoryToolbarState();
+}
+
 function closeNavPanel() {
     activeNavPanel = null;
     applyNavPanelVisibility();
@@ -533,7 +600,7 @@ function formatMonthLabel(yearMonth) {
     });
 }
 
-function getShiftTotals(shift, minWage = getMinWage()) {
+function getShiftTotals(shift, minWage = getMinWage(shift && shift.venue)) {
     const cashTips = Number(shift.cashTips) || 0;
     const duebackTips = Number(shift.duebackTips) || 0;
     const hours = Number(shift.hours) || 0;
@@ -575,15 +642,40 @@ function renderVenueList() {
     list.innerHTML = '';
     getVenues().forEach(venue => {
         const item = document.createElement('li');
-        item.className = 'tag';
-        item.appendChild(document.createTextNode(venue));
+        item.className = 'venue-item';
+
+        const top = document.createElement('div');
+        top.className = 'venue-item-top';
+
+        const name = document.createElement('span');
+        name.className = 'venue-item-name';
+        name.textContent = venue;
 
         const button = document.createElement('button');
         button.type = 'button';
+        button.className = 'venue-item-remove';
         button.setAttribute('aria-label', `Delete ${venue}`);
         button.textContent = '×';
         button.onclick = () => removeVenue(venue);
-        item.appendChild(button);
+
+        top.appendChild(name);
+        top.appendChild(button);
+
+        const wageLabel = document.createElement('label');
+        wageLabel.className = 'venue-wage';
+        const wageCaption = document.createElement('span');
+        wageCaption.textContent = 'Hourly wage';
+        const wageInput = document.createElement('input');
+        wageInput.type = 'number';
+        wageInput.step = '0.01';
+        wageInput.min = '0';
+        wageInput.value = getMinWage(venue).toFixed(2);
+        wageInput.addEventListener('change', () => updateVenueWage(venue, wageInput));
+        wageLabel.appendChild(wageCaption);
+        wageLabel.appendChild(wageInput);
+
+        item.appendChild(top);
+        item.appendChild(wageLabel);
         list.appendChild(item);
     });
 }
@@ -608,6 +700,20 @@ async function addVenue() {
     loadVenues();
 }
 
+function updateVenueWage(venueName, input) {
+    const wage = parseFloat(input.value);
+    if (!(wage >= 0)) {
+        input.value = getMinWage(venueName).toFixed(2);
+        return;
+    }
+
+    input.value = wage.toFixed(2);
+    const wages = getVenueWages();
+    wages[venueName] = wage;
+    saveVenueWages(wages);
+    loadShifts();
+}
+
 async function removeVenue(venueName) {
     const matchingShifts = getShifts().filter(shift => shift.venue === venueName);
     if (matchingShifts.length > 0) {
@@ -623,6 +729,9 @@ async function removeVenue(venueName) {
         }
     }
 
+    const wages = getVenueWages();
+    delete wages[venueName];
+    saveVenueWages(wages);
     saveVenues(getVenues().filter(venue => venue !== venueName));
     renderVenueList();
     loadVenues();
@@ -717,7 +826,6 @@ function renderShiftHistory(shifts, groupBy) {
 }
 
 function groupShifts(shifts, groupBy, newestFirst) {
-    const minWage = getMinWage();
     const grouped = new Map();
 
     shifts.forEach(shift => {
@@ -758,7 +866,7 @@ function groupShifts(shifts, groupBy, newestFirst) {
         }
 
         const group = grouped.get(key);
-        const totals = getShiftTotals(shift, minWage);
+        const totals = getShiftTotals(shift);
         group.shifts.push(shift);
         group.hours += totals.hours;
         group.tips += totals.totalTips;
@@ -878,14 +986,14 @@ function getPeerShifts(shift, allShifts) {
     );
 }
 
-function getPeerAverages(peerShifts, minWage = getMinWage()) {
+function getPeerAverages(peerShifts) {
     if (peerShifts.length === 0) return null;
 
     let totalHours = 0;
     let totalEarnings = 0;
 
     peerShifts.forEach(shift => {
-        const totals = getShiftTotals(shift, minWage);
+        const totals = getShiftTotals(shift);
         totalHours += totals.hours;
         totalEarnings += totals.earnings;
     });
@@ -943,11 +1051,10 @@ function createShiftCard(shift) {
     const card = document.createElement('div');
     card.className = 'record-card';
 
-    const minWage = getMinWage();
-    const totals = getShiftTotals(shift, minWage);
+    const totals = getShiftTotals(shift);
     const weekday = getWeekdayName(shift.date);
     const peerLabel = `${weekday}s at ${shift.venue}`;
-    const averages = getPeerAverages(getPeerShifts(shift, getShifts()), minWage);
+    const averages = getPeerAverages(getPeerShifts(shift, getShifts()));
     const hasPeers = averages !== null;
 
     const hourlyScore = scoreAgainstAverage(totals.hourlyRate, averages && averages.hourlyRate);
@@ -1068,13 +1175,12 @@ function calculateStats(period) {
 
     if (filteredShifts.length === 0) return null;
 
-    const minWage = getMinWage();
     let totalEarnings = 0;
     let totalTips = 0;
     let totalHours = 0;
 
     filteredShifts.forEach(shift => {
-        const totals = getShiftTotals(shift, minWage);
+        const totals = getShiftTotals(shift);
         totalEarnings += totals.earnings;
         totalTips += totals.totalTips;
         totalHours += totals.hours;
@@ -1181,7 +1287,8 @@ function editShift(timestamp) {
     document.getElementById('shiftFormTitle').textContent = 'Edit Shift';
     document.getElementById('saveShiftButton').textContent = 'Save Changes';
     document.getElementById('cancelEditButton').hidden = false;
-    document.getElementById('shiftForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setShiftFormCollapsed(false);
+    document.getElementById('shiftFormSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function cancelEdit() {
@@ -1214,6 +1321,7 @@ function updateMinWage() {
     const wage = parseFloat(wageInput.value);
     if (wage >= 0) {
         saveMinWage(wage);
+        renderVenueList();
         loadShifts();
     }
 }

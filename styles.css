@@ -607,6 +607,13 @@ header .page-subheading {
     letter-spacing: -0.3px;
 }
 
+.card-title {
+    color: var(--text-primary);
+    font-size: 1.25rem;
+    font-weight: 400;
+    letter-spacing: -0.3px;
+}
+
 .section-header {
     display: flex;
     flex-direction: column;
@@ -620,18 +627,68 @@ header .page-subheading {
     padding-bottom: 0;
 }
 
-.actions {
+.history-title-row {
     display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.history-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.icon-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 1px solid var(--border-medium);
+    border-radius: 6px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    cursor: pointer;
+}
+
+.icon-button:hover,
+.icon-button[aria-expanded="true"] {
+    background: var(--bg-tertiary);
+    border-color: var(--accent-dark);
+}
+
+.icon-button:focus-visible,
+button.collapsible-header:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
+.actions {
+    display: none;
     flex-direction: column;
     gap: 8px;
     width: 100%;
 }
 
-.history-filters {
+.history-section.is-disk-open .history-actions {
     display: flex;
+    animation: slideDown 0.2s ease;
+}
+
+.history-filters {
+    display: none;
     flex-direction: column;
     gap: 12px;
     margin-bottom: 16px;
+}
+
+.history-section.is-filter-open .history-filters {
+    display: flex;
+    animation: slideDown 0.2s ease;
 }
 
 .history-organize {
@@ -1012,6 +1069,88 @@ header .page-subheading {
     color: var(--text-primary);
 }
 
+.venue-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.venue-item {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid var(--border-light);
+    border-radius: 6px;
+    background: var(--bg-tertiary);
+}
+
+.venue-item-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.venue-item-name {
+    font-size: 1rem;
+    color: var(--text-primary);
+}
+
+.venue-item-remove {
+    background: transparent;
+    border: none;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-weight: 400;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    font-size: 18px;
+    line-height: 1;
+}
+
+.venue-item-remove:hover {
+    background: var(--border-light);
+    color: var(--text-primary);
+}
+
+.venue-wage {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.venue-wage span {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.venue-wage input {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--border-medium);
+    border-radius: 6px;
+    font-size: 1rem;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-family: inherit;
+}
+
+.venue-wage input:focus {
+    outline: none;
+    border-color: var(--accent-dark);
+    box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
 /* Records Display */
 .record-card {
     background: var(--bg-secondary);
@@ -1118,6 +1257,24 @@ header .page-subheading {
 }
 
 /* Collapsible Sections */
+button.collapsible-header {
+    width: 100%;
+    min-height: 44px;
+    padding: 0 0 12px;
+    margin: 0;
+    border: none;
+    border-bottom: 1px solid var(--border-light);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+}
+
+.card.is-collapsed .collapsible-header {
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
 .collapsible-header {
     display: flex;
     justify-content: space-between;
@@ -1127,7 +1284,8 @@ header .page-subheading {
     -webkit-tap-highlight-color: transparent;
 }
 
-.collapsible-header h2 {
+.collapsible-header h2,
+.collapsible-header .card-title {
     margin-bottom: 0;
     border-bottom: none;
     padding-bottom: 0;
@@ -1144,6 +1302,10 @@ header .page-subheading {
 .collapsible-content {
     margin-top: 20px;
     animation: slideDown 0.2s ease;
+}
+
+.collapsible-content[hidden] {
+    display: none;
 }
 
 @keyframes slideDown {
@@ -1345,12 +1507,18 @@ header .page-subheading {
         align-items: center;
     }
 
+    .history-toolbar {
+        display: none;
+    }
+
     .actions {
+        display: flex;
         flex-direction: row;
         width: auto;
     }
 
     .history-filters {
+        display: flex;
         flex-direction: row;
         align-items: flex-end;
         gap: 16px;
@@ -1379,6 +1547,23 @@ header .page-subheading {
 
     .settings-lists {
         flex-direction: row;
+    }
+
+    .venue-item {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+    }
+
+    .venue-item-top {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .venue-wage {
+        width: 160px;
+        flex-shrink: 0;
     }
 
     .stats-grid {
@@ -1427,12 +1612,14 @@ header .page-subheading {
 
     .form-group input,
     .form-group select,
-    .form-group textarea {
+    .form-group textarea,
+    .venue-wage input {
         min-height: 44px;
         font-size: 16px; /* Prevents zoom on iOS */
     }
 
-    .tag button {
+    .tag button,
+    .venue-item-remove {
         min-width: 44px;
         min-height: 44px;
     }

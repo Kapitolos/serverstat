@@ -51,8 +51,9 @@
                     <div id="savedNamesList" class="tag-list"></div>
                 </div>
                 <div class="form-group">
-                    <label for="minWage">Hourly Wage</label>
+                    <label for="minWage">Default hourly wage</label>
                     <input type="number" id="minWage" step="0.01" value="17.60" min="0">
+                    <small class="form-hint">Used for new venues and any venue without its own rate.</small>
                 </div>
                 <div class="form-group">
                     <label for="newVenue">Venues</label>
@@ -60,7 +61,7 @@
                         <input type="text" id="newVenue" placeholder="Venue name">
                         <button type="button" onclick="addVenue()" class="btn btn-secondary">Add venue</button>
                     </div>
-                    <ul id="venueList" class="tag-list"></ul>
+                    <ul id="venueList" class="venue-list"></ul>
                 </div>
                 <div class="form-group">
                     <label>Colour palette</label>
@@ -138,62 +139,83 @@
 
         <div class="main-content">
             <!-- Shift Entry Form -->
-            <section class="card">
-                <h2 id="shiftFormTitle">Log New Shift</h2>
-                <form id="shiftForm" onsubmit="handleSubmit(event)">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="date">Date:</label>
-                            <input type="date" id="date" required>
+            <section class="card" id="shiftFormSection">
+                <button type="button" class="collapsible-header" id="shiftFormToggle" aria-expanded="true" aria-controls="shiftFormContent" onclick="toggleShiftForm()">
+                    <span class="card-title" id="shiftFormTitle">Log New Shift</span>
+                    <span class="collapsible-icon" id="shiftFormIcon" aria-hidden="true">▴</span>
+                </button>
+                <div class="collapsible-content" id="shiftFormContent">
+                    <form id="shiftForm" onsubmit="handleSubmit(event)">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="date">Date:</label>
+                                <input type="date" id="date" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="venue">Venue:</label>
+                                <select id="venue" required>
+                                    <option value="">Select venue...</option>
+                                </select>
+                            </div>
                         </div>
+
                         <div class="form-group">
-                            <label for="venue">Venue:</label>
-                            <select id="venue" required>
-                                <option value="">Select venue...</option>
-                            </select>
+                            <label for="hours">Hours Worked:</label>
+                            <input type="number" id="hours" step="0.25" min="0" required>
                         </div>
-                    </div>
 
-                    <div class="form-group">
-                        <label for="hours">Hours Worked:</label>
-                        <input type="number" id="hours" step="0.25" min="0" required>
-                    </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="cashTips">Cash Tips ($):</label>
+                                <input type="number" id="cashTips" step="0.01" min="0" value="0" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="duebackTips">Dueback Tips ($):</label>
+                                <input type="number" id="duebackTips" step="0.01" min="0" value="0" required>
+                            </div>
+                        </div>
 
-                    <div class="form-row">
                         <div class="form-group">
-                            <label for="cashTips">Cash Tips ($):</label>
-                            <input type="number" id="cashTips" step="0.01" min="0" value="0" required>
+                            <label for="shiftNote">Note (optional):</label>
+                            <textarea id="shiftNote" rows="3" placeholder="Add a note about this shift"></textarea>
                         </div>
-                        <div class="form-group">
-                            <label for="duebackTips">Dueback Tips ($):</label>
-                            <input type="number" id="duebackTips" step="0.01" min="0" value="0" required>
+
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary" id="saveShiftButton">Save Shift</button>
+                            <button type="button" class="btn btn-secondary" onclick="handleSaveAndExport()">Export to Device</button>
+                            <button type="button" class="btn btn-secondary" id="cancelEditButton" onclick="cancelEdit()" hidden>Cancel edit</button>
                         </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="shiftNote">Note (optional):</label>
-                        <textarea id="shiftNote" rows="3" placeholder="Add a note about this shift"></textarea>
-                    </div>
-
-                    <div class="form-actions">
-                        <button type="submit" class="btn btn-primary" id="saveShiftButton">Save Shift</button>
-                        <button type="button" class="btn btn-secondary" onclick="handleSaveAndExport()">Export to Device</button>
-                        <button type="button" class="btn btn-secondary" id="cancelEditButton" onclick="cancelEdit()" hidden>Cancel edit</button>
-                    </div>
-                </form>
+                    </form>
+                </div>
             </section>
 
             <!-- Shift Records -->
-            <section class="card">
+            <section class="card history-section" id="historySection">
                 <div class="section-header">
-                    <h2>Shift History</h2>
-                    <div class="actions">
-                        <button onclick="exportData()" class="btn btn-secondary btn-small">Export JSON</button>
-                        <button onclick="exportCsv()" class="btn btn-secondary btn-small">Export CSV</button>
-                        <button onclick="importData()" class="btn btn-secondary btn-small">Import Data</button>
+                    <div class="history-title-row">
+                        <h2>Shift History</h2>
+                        <div class="history-toolbar">
+                            <button type="button" class="icon-button" id="historyDiskButton" aria-label="Export and import" aria-expanded="false" aria-controls="historyActions" onclick="toggleHistoryPanel('disk')">
+                                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
+                                    <path d="M5 4h11l4 4v12H5V4z"></path>
+                                    <path d="M8 4v5h8V4"></path>
+                                    <path d="M8 14h8v6H8z"></path>
+                                </svg>
+                            </button>
+                            <button type="button" class="icon-button" id="historyFilterButton" aria-label="Organize and sort" aria-expanded="false" aria-controls="historyFilters" onclick="toggleHistoryPanel('filter')">
+                                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
+                                    <path d="M4 6h16l-6.5 8v4.5L10.5 20v-6L4 6z"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="actions history-actions" id="historyActions">
+                        <button type="button" onclick="exportData()" class="btn btn-secondary btn-small">Export JSON</button>
+                        <button type="button" onclick="exportCsv()" class="btn btn-secondary btn-small">Export CSV</button>
+                        <button type="button" onclick="importData()" class="btn btn-secondary btn-small">Import Data</button>
                     </div>
                 </div>
-                <div class="history-filters">
+                <div class="history-filters" id="historyFilters">
                     <div class="history-organize">
                         <label for="historyGroupBy">Organize by</label>
                         <select id="historyGroupBy" onchange="setHistoryGroupBy(this.value)">
